@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="https://www.thymeleaf.org/thymeleaf-extras-springsecurity5">
+<head>
+<title th:text="index"></title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+</head>
+<body>
+	<div>
+		<span><a href="login">Login</a></span>
+		<span><a href="logout">Logout</a></span>
+		<span><a href="http://localhost:4442/" target="blank">Eureka</a></span>
+		<span><a href="events">Events</a></span>
+	</div>
+	<h1>All events</h1>
+	<div>
+		<table>
+			<thead>
+				<tr>
+					<th th:text="id"></th>
+					<th th:text="name"></th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr th:each="act : ${activities}">
+					<td><label th:text="${act.id}"></label></td>
+					<td><label th:text="${act.name}"></label></td>
+					<td><a th:href="@{'eventdetails?id=' + ${act.id}}">Buy</a></td>
+				</tr>
+			</tbody>
+		</table>
+	</div>
+</body>
+</html>
