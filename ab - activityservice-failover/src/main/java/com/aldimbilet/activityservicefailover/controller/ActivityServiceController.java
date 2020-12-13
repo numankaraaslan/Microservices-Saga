@@ -2,9 +2,9 @@ package com.aldimbilet.activityservicefailover.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 // All activityservice endpoints are forwarded here by gateway routeconfig
@@ -12,19 +12,19 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class ActivityServiceController
 {
-	@GetMapping(path = "activity-failover")
-	public ResponseEntity<String> userServiceGetFails()
+	@RequestMapping(path = "activity-failover", method = RequestMethod.GET)
+	public ResponseEntity<Object> userServiceFails()
 	{
 		System.err.println("This is activityservice get fails");
-		ResponseEntity<String> entity = new ResponseEntity<>("activity service is down", HttpStatus.SERVICE_UNAVAILABLE);
+		ResponseEntity<Object> entity = new ResponseEntity<>("activity service is down", HttpStatus.SERVICE_UNAVAILABLE);
 		return entity;
 	}
 
-	@PostMapping(path = "activity-failover")
-	public ResponseEntity<String> userServicePostFails(@RequestBody String user)
+	@RequestMapping(path = "activity-failover", method = RequestMethod.POST)
+	public ResponseEntity<Object> userServiceFails(@RequestBody Object body)
 	{
 		System.err.println("This is activityservice post fails");
-		ResponseEntity<String> entity = new ResponseEntity<>("activity service is down", HttpStatus.SERVICE_UNAVAILABLE);
+		ResponseEntity<Object> entity = new ResponseEntity<>("activity service is down", HttpStatus.SERVICE_UNAVAILABLE);
 		return entity;
 	}
 }

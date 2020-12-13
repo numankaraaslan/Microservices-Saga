@@ -10,13 +10,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.aldimbilet.activityservice.model.Activity;
 import com.aldimbilet.activityservice.repo.ActivityRepository;
 import com.aldimbilet.activityservice.util.MapperUtils;
 import com.aldimbilet.pojos.ActivityPojo;
-import com.aldimbilet.util.Constants;
-import com.aldimbilet.util.JacksonUtils;
 
 @RestController
 // this path "act" is to distinguish paths in the gateway, make it easier to read
@@ -37,51 +36,43 @@ public class ActivityController
 		return entity;
 	}
 
-	@PostMapping(path = "checkActivitySeatAvailable")
-	public ResponseEntity<String> checkActivitySeatAvailable(@RequestBody String actID)
+	@GetMapping(path = "checkActivitySeatAvailable")
+	public ResponseEntity<Boolean> checkActivitySeatAvailable(@RequestParam Long actId)
 	{
-		Activity act = repo.findById(Long.parseLong(actID));
-		ResponseEntity<String> entity;
-		if (act.getNumberOfSeats() > 0)
-		{
-			entity = new ResponseEntity<>(Constants.EVENT_NOT_FULL, HttpStatus.OK);
-		}
-		else
-		{
-			entity = new ResponseEntity<>(Constants.EVENT_FULL, HttpStatus.OK);
-		}
+		Activity act = repo.findById(actId);
+		ResponseEntity<Boolean> entity;
+		entity = new ResponseEntity<>(act.getNumberOfSeats() > 0, HttpStatus.OK);
 		return entity;
 	}
 
-	@PostMapping(path = "soldSeat")
-	public ResponseEntity<String> soldSeat(@RequestBody String actID)
+	@PostMapping(path = "sellSeat")
+	public ResponseEntity<String> sellSeat(@RequestBody Long actID)
 	{
-		Activity act = repo.findById(Long.parseLong(actID));
+		Activity act = repo.findById(actID);
 		act.setNumberOfSeats(act.getNumberOfSeats() - 1);
 		repo.save(act);
 		ResponseEntity<String> entity = new ResponseEntity<>(HttpStatus.OK);
 		return entity;
 	}
 
-	@PostMapping(path = "getActivityInfo")
-	public ResponseEntity<String> getActivityInfo(@RequestBody Long actId)
+	@GetMapping(path = "getActivityInfo")
+	public ResponseEntity<ActivityPojo> getActivityInfo(@RequestParam Long actId)
 	{
 		ActivityPojo pojo = MapperUtils.convertActivityToActivityPojo(repo.findById(actId));
-		String pojoJson = JacksonUtils.writeValueToJson(pojo);
-		ResponseEntity<String> entity;
-		if (!"".equals(pojoJson))
+		ResponseEntity<ActivityPojo> entity;
+		if (pojo != null)
 		{
-			entity = new ResponseEntity<>(pojoJson, HttpStatus.OK);
+			entity = new ResponseEntity<>(pojo, HttpStatus.OK);
 		}
 		else
 		{
-			entity = new ResponseEntity<>("", HttpStatus.INTERNAL_SERVER_ERROR);
+			entity = new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 		return entity;
 	}
 
 	@GetMapping(path = "getActivities")
-	public ResponseEntity<String> getActivities()
+	public ResponseEntity<List<ActivityPojo>> getActivities()
 	{
 		List<Activity> activities = repo.getAll();
 		List<ActivityPojo> pojos = new ArrayList<>();
@@ -89,16 +80,8 @@ public class ActivityController
 		{
 			pojos.add(MapperUtils.convertActivityToActivityPojo(activity));
 		}
-		String pojoJson = JacksonUtils.writeValueToJson(pojos);
-		ResponseEntity<String> entity;
-		if (!"".equals(pojoJson))
-		{
-			entity = new ResponseEntity<>(pojoJson, HttpStatus.OK);
-		}
-		else
-		{
-			entity = new ResponseEntity<>("", HttpStatus.INTERNAL_SERVER_ERROR);
-		}
+		ResponseEntity<List<ActivityPojo>> entity;
+		entity = new ResponseEntity<>(pojos, HttpStatus.OK);
 		return entity;
 	}
 }

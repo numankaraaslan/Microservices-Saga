@@ -42,6 +42,7 @@ public class UserRepository
 		session.beginTransaction();
 		boolean res = session.save(user) != null;
 		session.getTransaction().commit();
+		session.refresh(user);
 		return res;
 	}
 

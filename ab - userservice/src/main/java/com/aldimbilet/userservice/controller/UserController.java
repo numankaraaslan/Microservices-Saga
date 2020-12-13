@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.aldimbilet.pojos.CardInfoPojo;
 import com.aldimbilet.pojos.UserInfoPojo;
@@ -17,7 +18,6 @@ import com.aldimbilet.userservice.model.CardInfo;
 import com.aldimbilet.userservice.repo.CardRepository;
 import com.aldimbilet.userservice.service.UserService;
 import com.aldimbilet.userservice.util.MapperUtils;
-import com.aldimbilet.util.JacksonUtils;
 
 @RestController
 // this path "user" is to distinguish paths in the gateway, make it easier to read
@@ -41,44 +41,32 @@ public class UserController
 		return entity;
 	}
 
-	@PostMapping(path = "getUserCard")
-	public ResponseEntity<String> getUserCard(@RequestBody String userId)
+	@GetMapping(path = "getUserCard")
+	public ResponseEntity<CardInfoPojo> getUserCard(@RequestParam Long userId)
 	{
-		CardInfo info = cardRepo.findByUserId(Long.parseLong(userId));
+		CardInfo info = cardRepo.findByUserId(userId);
 		CardInfoPojo pojo = MapperUtils.convertCardInfoToCardInfoPojo(info);
-		String pojoJson = JacksonUtils.writeValueToJson(pojo);
-		ResponseEntity<String> entity;
-		if (!"".equals(pojoJson))
+		ResponseEntity<CardInfoPojo> entity;
+		if (pojo != null)
 		{
-			entity = new ResponseEntity<>(pojoJson, HttpStatus.OK);
+			entity = new ResponseEntity<>(pojo, HttpStatus.OK);
 		}
 		else
 		{
-			entity = new ResponseEntity<>("", HttpStatus.INTERNAL_SERVER_ERROR);
+			entity = new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 		return entity;
 	}
 
-	@PostMapping(path = "getUserInfo")
-	public ResponseEntity<String> getUserInfo(@RequestBody String username)
+	@GetMapping(path = "getUserInfo")
+	public ResponseEntity<UserInfoPojo> getUserInfo(@RequestParam String username)
 	{
-		// Feign forced me to make this a post mapping
-		// Because there is a method parameter (String username) and the feign client will consider this as a postmapping
-		// Even if you try to force as @GetMapping in a feign client, it won't work
 		System.err.println("This is find user by name (" + username + ")");
 		ABUser user = userService.findByUsername(username);
 		UserInfoPojo pojo = MapperUtils.convertABUserToUserInfoPojo(user);
-		String pojoJson = JacksonUtils.writeValueToJson(pojo);
 		System.err.println("Found user info: " + pojo.toString());
-		ResponseEntity<String> entity;
-		if (!"".equals(pojoJson))
-		{
-			entity = new ResponseEntity<>(pojoJson, HttpStatus.OK);
-		}
-		else
-		{
-			entity = new ResponseEntity<>("", HttpStatus.INTERNAL_SERVER_ERROR);
-		}
+		ResponseEntity<UserInfoPojo> entity;
+		entity = new ResponseEntity<>(pojo, HttpStatus.OK);
 		return entity;
 	}
 
@@ -90,7 +78,7 @@ public class UserController
 		System.err.println("Incoming user is : " + userInfo);
 		ABUser newUser = MapperUtils.convertUserRegisterPojoToABUser(userInfo);
 		ResponseEntity<String> entity;
-		// there must be some exception handling here but before that, MVC app musth validate the inputs
+		// there must be some exception handling here, but before that, MVC app must validate the inputs
 		// so that this MICROservice can stay micro
 		// for simplicity, i think most of the errors involving the user registeration is just data errors or db errors
 		if (userService.save(newUser))
