@@ -40,6 +40,9 @@
 			<div th:if="${param.err}">
 				<label th:if="${param.err[0]} == 1">Signup error or etc</label>
 			</div>
+			<div th:if="${param.err}">
+				<label th:if="${param.err[0]} == 2">Userservice unavailable</label>
+			</div>
 		</form>
 	</div>
 </body>

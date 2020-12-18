@@ -17,7 +17,7 @@ import lombok.Data;
 @Table(name = "USER")
 // At some point of the development i have decided to name this class with domainname (aldimbilet.com)
 // a and b is the initials of the words "aldim" and "bilet"
-// Later than i have realised it became abuser :D this has nothing to do with any kind of abuse :D
+// Later than i have realised it became "abuser" :D this has nothing to do with any kind of abuse :D
 // In turkish, if you apply the same logic, this could also be Abuzer :)
 public class ABUser
 {

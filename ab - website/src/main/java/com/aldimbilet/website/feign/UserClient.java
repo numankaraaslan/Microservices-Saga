@@ -6,7 +6,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
+import com.aldimbilet.pojos.CardInfoPojo;
+import com.aldimbilet.pojos.UserInfoPojo;
 import com.aldimbilet.pojos.UserRegisterPojo;
+import com.aldimbilet.util.Constants;
 
 // Must give a url to NOT use load balancer (we have a gateway that routes to eureka with lb:// links)
 // Otherwise it will throw "did you forget load balancer?" error
@@ -19,17 +24,17 @@ public interface UserClient
 	// Just like invoking a method in java
 	// path = localhost:4441/user/hello
 	@GetMapping(path = "hello")
-	ResponseEntity<String> sayHello();
+	ResponseEntity<String> sayHello(@RequestHeader(value = Constants.HEADER_STRING) String token);
 
 	// There is a request body parameter here to be able to cope with spring security all the way down to userservice
 	// It will by default require a username and password json object as the post body
 	// Jackson handles some conversion from the string to json here, behind the scene
-	// userservice login returns ResponseEntity from sprng security (guess this the default behavior)
+	// userservice login returns ResponseEntity from spring security (guess this the default behavior)
 	// path = localhost:4441/user/login
 	@PostMapping(path = "login", consumes = MediaType.APPLICATION_JSON_VALUE)
 	ResponseEntity<String> login(@RequestBody String user);
 
-	// The register endpoint in the userservice returns ResponseEntity, and takes a userpojo parameter
+	// The register endpoint in the userservice returns ResponseEntity, and takes a userInfo parameter
 	// Your feign client methods must have the same return type and parameters and the http path
 	// Just like invoking a method in java
 	// path = localhost:4441/user/register
@@ -41,18 +46,12 @@ public interface UserClient
 	// Your feign client methods must have the same return type and parameters and the http path
 	// Just like invoking a method in java
 	// path = localhost:4441/user/getUserInfo
-	// Feign forced me to make this a post mapping
-	// Because there is a method parameter (String username) and the feign client will consider this as a postmapping
-	// Even if you try to force as @GetMapping in a feign client, it won't work
-	// I would have used UserInfoPojo instead of String but feign is a pain in the ass
-	// Also don't forget consumes information (the client will try to convert it into something and fail)
-	@PostMapping(path = "getUserInfo", consumes = MediaType.TEXT_PLAIN_VALUE)
-	ResponseEntity<String> getUserInfo(@RequestBody String username);
+	// Userservice getUserInfo method does not have token parameter, because it is transported inside header
+	@GetMapping(path = "getUserInfo", consumes = MediaType.TEXT_PLAIN_VALUE)
+	ResponseEntity<UserInfoPojo> getUserInfo(@RequestHeader(value = Constants.HEADER_STRING) String token, @RequestParam String username);
 
-	// Feign is ridiculous, i had to write my own builder for jwt headers and then i realized
-	// There should be an encoder for types other than String, remember like a decoder
-	// Feign body doesn't seem to accept any body except string
-	// That is why activity id is String
-	@PostMapping(path = "getUserCard", consumes = MediaType.TEXT_PLAIN_VALUE)
-	ResponseEntity<String> getUserCard(@RequestBody String userId);
+	// Don't forget consumes information (the client will try to convert it into something and fail)
+	// Userservice getUserCard method does not have token parameter, because it is transported inside header
+	@GetMapping(path = "getUserCard", consumes = MediaType.APPLICATION_JSON_VALUE)
+	ResponseEntity<CardInfoPojo> getUserCard(@RequestHeader(value = Constants.HEADER_STRING) String token, @RequestParam Long userId);
 }

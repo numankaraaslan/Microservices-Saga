@@ -1,11 +1,8 @@
 package com.aldimbilet.website.controller;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import javax.servlet.http.HttpServletRequest;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.env.Environment;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,7 +10,6 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.ModelAndView;
 import com.aldimbilet.pojos.ActivityPojo;
 import com.aldimbilet.pojos.BasketPojo;
@@ -21,31 +17,22 @@ import com.aldimbilet.pojos.CardInfoPojo;
 import com.aldimbilet.pojos.UserInfoPojo;
 import com.aldimbilet.pojos.UserRegisterPojo;
 import com.aldimbilet.util.Constants;
-import com.aldimbilet.util.JacksonUtils;
 import com.aldimbilet.website.feign.ActivityClient;
 import com.aldimbilet.website.feign.PaymentClient;
 import com.aldimbilet.website.feign.UserClient;
-import com.aldimbilet.website.util.FeignUtils;
 import com.aldimbilet.website.util.SessionConstants;
 import feign.FeignException;
 import lombok.AllArgsConstructor;
 
 @Controller
 @AllArgsConstructor
-@RestControllerAdvice
 public class MikroServiceClientController
 {
-	@Autowired
-	private FeignUtils feignUtils;
-
-	@Autowired
-	private Environment env;
-
-	@Autowired
 	private UserClient userClient;
 
-	@Autowired
 	private ActivityClient activityClient;
+
+	private PaymentClient paymentClient;
 
 	@GetMapping(path =
 	{ "", "login" })
@@ -73,18 +60,30 @@ public class MikroServiceClientController
 	@PostMapping(path = "signup")
 	public ModelAndView signup(@ModelAttribute(name = "userregisterpojo") UserRegisterPojo pojo)
 	{
-		ResponseEntity<String> responseEntity = userClient.register(pojo);
-		// the response is determined by userservice
-		// you will implement some logic according to the retuyrn value
-		// it could be some entity inside the responseentity or a whole other data structure of your imagination
-		// just make sure this communication is documented somewhere
-		if (responseEntity.getStatusCode() == HttpStatus.OK)
+		try
 		{
+			ResponseEntity<String> responseEntity = userClient.register(pojo);
+			// the response is determined by userservice
+			// you will implement some logic according to the return value
+			// it could be some entity inside the responseentity or a whole other data structure of your imagination
+			// just make sure this communication is documented somewhere
 			return new ModelAndView("redirect:/login");
 		}
-		else
+		catch (FeignException e)
 		{
-			return new ModelAndView("redirect:/signup?err=1");
+			// Feign considers httpresponses other than 200 are all exceptions
+			// You can write a custom error decoder for feign and throw your own exceptions by grouping them together
+			// This is a very basic fault tolerance built upon feign
+			if (e.status() == HttpStatus.SERVICE_UNAVAILABLE.value())
+			{
+				// 503
+				return new ModelAndView("redirect:/signup?err=2");
+			}
+			else
+			{
+				// General errors
+				return new ModelAndView("redirect:/signup?err=1");
+			}
 		}
 	}
 
@@ -107,32 +106,24 @@ public class MikroServiceClientController
 		// You can't just reserve a seat and occupe some space
 		BasketPojo basket = (BasketPojo) req.getSession().getAttribute(SessionConstants.BASKET);
 		String bearer = (String) req.getSession().getAttribute(SessionConstants.BEARER);
-		ActivityClient tempActivityClient = feignUtils.buildFeignClient(ActivityClient.class, env.getProperty("gateway.adress.activityservice"), bearer);
-		String resp = tempActivityClient.checkActivitySeatAvailable(basket.getActId().toString()).getBody();
-		if (resp.equals(Constants.EVENT_FULL))
+		Boolean resp = activityClient.checkActivitySeatAvailable(Constants.TOKEN_PREFIX + bearer, basket.getActId()).getBody();
+		if (!resp)
 		{
 			payment.addObject("status", "Event is full, sorry");
 		}
 		else
 		{
-			PaymentClient tempPaymentClient = feignUtils.buildFeignClient(PaymentClient.class, env.getProperty("gateway.adress.paymentservice"), bearer);
 			String cardInfo = req.getSession().getAttribute(SessionConstants.CARD_NUMBER).toString();
-			ResponseEntity<String> sold = tempPaymentClient.makePayment(cardInfo);
-			if (sold.getStatusCode() == HttpStatus.OK)
+			Boolean sold = paymentClient.makePayment(Constants.TOKEN_PREFIX + bearer, cardInfo).getBody();
+			// Also makePayment randomly returns true or false, simulating credit card denials or various issues
+			if (sold)
 			{
-				if (sold.getBody().equals(Constants.PAYMENT_DONE))
-				{
-					tempActivityClient.soldSeat(basket.getActId().toString());
-					payment.addObject("status", "Payment done, you bought the ticket");
-				}
-				else
-				{
-					tempPaymentClient.returnPayment(cardInfo);
-					payment.addObject("status", "Payment error, sorry");
-				}
+				activityClient.sellSeat(Constants.TOKEN_PREFIX + bearer, basket.getActId());
+				payment.addObject("status", "Payment done, you bought the ticket");
 			}
 			else
 			{
+				paymentClient.returnPayment(Constants.TOKEN_PREFIX + bearer, cardInfo);
 				payment.addObject("status", "Payment error, sorry");
 			}
 		}
@@ -148,9 +139,8 @@ public class MikroServiceClientController
 		String username = req.getSession().getAttribute(SessionConstants.USERNAME).toString();
 		String activityname = activityPojo.getName();
 		String bearer = (String) req.getSession().getAttribute(SessionConstants.BEARER);
-		UserClient tempUserClient = feignUtils.buildFeignClient(UserClient.class, env.getProperty("gateway.adress.userservice"), bearer);
-		HttpEntity<String> resp = tempUserClient.getUserCard(basket.getUserId().toString());
-		String cardnumber = JacksonUtils.readValueAsJson(resp.getBody().getBytes(), CardInfoPojo.class).getCardNumber();
+		HttpEntity<CardInfoPojo> resp = userClient.getUserCard(Constants.TOKEN_PREFIX + bearer, basket.getUserId());
+		String cardnumber = resp.getBody().getCardNumber();
 		req.getSession().setAttribute(SessionConstants.CARD_NUMBER, cardnumber);
 		checkout.addObject("username", username);
 		checkout.addObject("activityname", activityname);
@@ -164,7 +154,7 @@ public class MikroServiceClientController
 		ModelAndView eventdetails = new ModelAndView("eventdetails");
 		Long actId = Long.parseLong(req.getParameter("id"));
 		UserInfoPojo userPojo = (UserInfoPojo) req.getSession().getAttribute(SessionConstants.USERPOJO);
-		ActivityPojo activityPojo = JacksonUtils.readValueAsJson(activityClient.getActivityInfo(actId).getBody().getBytes(), ActivityPojo.class);
+		ActivityPojo activityPojo = activityClient.getActivityInfo(actId).getBody();
 		req.getSession().setAttribute(SessionConstants.ACTIVITY_POJO, activityPojo);
 		Long userId = userPojo.getId();
 		BasketPojo basket = new BasketPojo();
@@ -191,7 +181,6 @@ public class MikroServiceClientController
 		{
 			ResponseEntity<String> responseEntity = userClient.login(user);
 			token = responseEntity.getBody();
-			System.err.println("This is response from userservice " + token);
 			String bearer = token.substring(token.indexOf(" ") + 1);
 			user = token.substring(token.indexOf("(") + 1, token.indexOf(")"));
 			req.getSession().setAttribute(SessionConstants.BEARER, bearer);
@@ -204,6 +193,10 @@ public class MikroServiceClientController
 			{
 				return new ModelAndView("redirect:/login?err=2");
 			}
+			else if (e.status() == HttpStatus.UNAUTHORIZED.value())
+			{
+				return new ModelAndView("redirect:/login?err=3");
+			}
 			else
 			{
 				return new ModelAndView("redirect:/login");
@@ -214,10 +207,7 @@ public class MikroServiceClientController
 	@GetMapping(path = "events")
 	public ModelAndView events()
 	{
-		String result = activityClient.getActivities().getBody();
-		// Tip, don't use Feign
-		// Write your own flexible resttemplates to avoid these type nuisances
-		List<ActivityPojo> activities = JacksonUtils.readValueAsJson(result.getBytes(), ArrayList.class);
+		List<ActivityPojo> activities = activityClient.getActivities().getBody();
 		ModelAndView events = new ModelAndView("events");
 		events.addObject("activities", activities);
 		return events;
@@ -227,28 +217,21 @@ public class MikroServiceClientController
 	public ModelAndView index(HttpServletRequest req)
 	{
 		// Normally there will be a logic for secure or free services
-		// Free endpoints will not require jwt headers and can directly use @FeignClient s
-		// If it requires jwt, you must invoke a builder
-		// That is why there is 1 autowired and 1 local instance of feignclients
-		// This is for demonstration purposes, so MVC app is a bit of a mess
+		// Free endpoints will not require jwt headers and they won't require @RequestHeader in @FeignClient classes
 		String bearer = (String) req.getSession().getAttribute(SessionConstants.BEARER);
 		String username = (String) req.getSession().getAttribute(SessionConstants.USERNAME);
 		System.err.println("token = " + bearer);
 		String userInfo = "", userString = "", actString = "";
 		if (username != null)
 		{
-			// Creating a custommized feignclient must be cleaner, this is a mess
-			// I needed a helper to use the feign builder
-			UserClient tempUserClient = feignUtils.buildFeignClient(UserClient.class, env.getProperty("gateway.adress.userservice"), bearer);
-			ActivityClient tempActClient = feignUtils.buildFeignClient(ActivityClient.class, env.getProperty("gateway.adress.activityservice"), bearer);
 			System.err.println("Will get info for the user (" + username + ")");
-			ResponseEntity<String> resp = null;
+			ResponseEntity<UserInfoPojo> resp = null;
 			try
 			{
-				resp = tempUserClient.getUserInfo(username);
+				resp = userClient.getUserInfo(Constants.TOKEN_PREFIX + bearer, username);
 				if (resp.getStatusCode() == HttpStatus.OK)
 				{
-					UserInfoPojo infoPojo = JacksonUtils.readValueAsJson(resp.getBody().getBytes(), UserInfoPojo.class);
+					UserInfoPojo infoPojo = resp.getBody();
 					userInfo = infoPojo.getName() + " " + infoPojo.getSurname() + " is registered at " + infoPojo.getRegDate();
 					req.getSession().setAttribute(SessionConstants.USERPOJO, infoPojo);
 				}
@@ -256,7 +239,7 @@ public class MikroServiceClientController
 				{
 					userInfo = "Failed to get user info";
 				}
-				userString = "From user service " + tempUserClient.sayHello().getBody();
+				userString = "From user service " + userClient.sayHello(Constants.TOKEN_PREFIX + bearer).getBody();
 			}
 			catch (FeignException e)
 			{
@@ -268,7 +251,7 @@ public class MikroServiceClientController
 			}
 			try
 			{
-				actString = "From activity service " + tempActClient.sayHello().getBody();
+				actString = "From activity service " + activityClient.sayHello(Constants.TOKEN_PREFIX + bearer).getBody();
 			}
 			catch (FeignException e)
 			{
