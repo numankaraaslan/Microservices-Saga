@@ -25,6 +25,8 @@ import feign.FeignException;
 import lombok.AllArgsConstructor;
 
 @Controller
+// @AllArgsConstructor creates a constructor with the properties
+// Spring injects them as beans
 @AllArgsConstructor
 public class MikroServiceClientController
 {
@@ -34,8 +36,7 @@ public class MikroServiceClientController
 
 	private PaymentClient paymentClient;
 
-	@GetMapping(path =
-	{ "", "login" })
+	@GetMapping(path = "login")
 	public ModelAndView login()
 	{
 		ModelAndView index = new ModelAndView("login");
@@ -62,11 +63,7 @@ public class MikroServiceClientController
 	{
 		try
 		{
-			ResponseEntity<String> responseEntity = userClient.register(pojo);
-			// the response is determined by userservice
-			// you will implement some logic according to the return value
-			// it could be some entity inside the responseentity or a whole other data structure of your imagination
-			// just make sure this communication is documented somewhere
+			userClient.register(pojo);
 			return new ModelAndView("redirect:/login");
 		}
 		catch (FeignException e)
@@ -103,7 +100,7 @@ public class MikroServiceClientController
 		// This is the fault tolerance from business acpect
 		// In order to prevent spamming, there is no reservation logic
 		// If all seats are taken before you buy the ticket, you will get an error
-		// You can't just reserve a seat and occupe some space
+		// You can't just reserve a seat and occupy some space
 		BasketPojo basket = (BasketPojo) req.getSession().getAttribute(SessionConstants.BASKET);
 		String bearer = (String) req.getSession().getAttribute(SessionConstants.BEARER);
 		Boolean resp = activityClient.checkActivitySeatAvailable(Constants.TOKEN_PREFIX + bearer, basket.getActId()).getBody();
@@ -123,6 +120,7 @@ public class MikroServiceClientController
 			}
 			else
 			{
+				// Returning payment is another aspect of fault tolerance
 				paymentClient.returnPayment(Constants.TOKEN_PREFIX + bearer, cardInfo);
 				payment.addObject("status", "Payment error, sorry");
 			}
@@ -174,11 +172,17 @@ public class MikroServiceClientController
 		String username = req.getParameter("username");
 		String password = req.getParameter("password");
 		// Quick and dirty way of creating the necessary object for spring security
+		// This is basically a json object, could have been mapped from spring security User class to json with jackson
+		// I'm lazy
 		String user = "{\"username\":\"" + username + "\",\"password\":\"" + password + "\"}";
 		System.err.println("Logging in");
 		String token = "";
 		try
 		{
+			// the response is determined by userservice
+			// you will implement some logic according to the return value
+			// it could be some entity inside the responseentity or a whole other data structure of your imagination
+			// just make sure this communication is documented somewhere
 			ResponseEntity<String> responseEntity = userClient.login(user);
 			token = responseEntity.getBody();
 			String bearer = token.substring(token.indexOf(" ") + 1);
@@ -189,6 +193,8 @@ public class MikroServiceClientController
 		}
 		catch (FeignException e)
 		{
+			// Each exception must mean something different
+			// Throw them carefully from the services
 			if (e.status() == HttpStatus.SERVICE_UNAVAILABLE.value())
 			{
 				return new ModelAndView("redirect:/login?err=2");
@@ -213,7 +219,8 @@ public class MikroServiceClientController
 		return events;
 	}
 
-	@GetMapping(path = "index")
+	@GetMapping(path =
+	{ "", "index" })
 	public ModelAndView index(HttpServletRequest req)
 	{
 		// Normally there will be a logic for secure or free services
@@ -228,6 +235,7 @@ public class MikroServiceClientController
 			ResponseEntity<UserInfoPojo> resp = null;
 			try
 			{
+				// Constants.TOKEN_PREFIX + bearer = "Bearer asdasdqwe123"
 				resp = userClient.getUserInfo(Constants.TOKEN_PREFIX + bearer, username);
 				if (resp.getStatusCode() == HttpStatus.OK)
 				{
