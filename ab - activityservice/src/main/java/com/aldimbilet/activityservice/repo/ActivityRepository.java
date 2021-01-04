@@ -51,7 +51,6 @@ public class ActivityRepository
 		List<Activity> res = null;
 		CriteriaBuilder builder = session.getCriteriaBuilder();
 		CriteriaQuery<Activity> criteria_query = builder.createQuery(Activity.class);
-		Root<Activity> root = criteria_query.from(Activity.class);
 		Query<Activity> query = session.createQuery(criteria_query);
 		res = query.getResultList();
 		return res;
