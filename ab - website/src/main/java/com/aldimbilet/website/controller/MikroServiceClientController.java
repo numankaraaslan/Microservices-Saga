@@ -97,33 +97,33 @@ public class MikroServiceClientController
 	public ModelAndView payment(HttpServletRequest req)
 	{
 		ModelAndView payment = new ModelAndView("payment");
-		// This is the fault tolerance from business acpect
+		// This is the fault tolerance from business aspect
 		// In order to prevent spamming, there is no reservation logic
 		// If all seats are taken before you buy the ticket, you will get an error
 		// You can't just reserve a seat and occupy some space
 		BasketPojo basket = (BasketPojo) req.getSession().getAttribute(SessionConstants.BASKET);
 		String bearer = (String) req.getSession().getAttribute(SessionConstants.BEARER);
-		Boolean resp = activityClient.checkActivitySeatAvailable(Constants.TOKEN_PREFIX + bearer, basket.getActId()).getBody();
-		if (!resp)
+		String cardInfo = req.getSession().getAttribute(SessionConstants.CARD_NUMBER).toString();
+		Boolean sold = paymentClient.makePayment(Constants.TOKEN_PREFIX + bearer, cardInfo).getBody();
+		// makePayment randomly returns true or false, simulating credit card denials or various issues
+		if (sold)
 		{
-			payment.addObject("status", "Event is full, sorry");
-		}
-		else
-		{
-			String cardInfo = req.getSession().getAttribute(SessionConstants.CARD_NUMBER).toString();
-			Boolean sold = paymentClient.makePayment(Constants.TOKEN_PREFIX + bearer, cardInfo).getBody();
-			// Also makePayment randomly returns true or false, simulating credit card denials or various issues
-			if (sold)
+			Boolean resp = activityClient.checkActivitySeatAvailable(Constants.TOKEN_PREFIX + bearer, basket.getActId()).getBody();
+			if (!resp)
+			{
+				payment.addObject("status", "Event is full, sorry");
+				// Returning payment is another aspect of fault tolerance
+				paymentClient.returnPayment(Constants.TOKEN_PREFIX + bearer, cardInfo);
+			}
+			else
 			{
 				activityClient.sellSeat(Constants.TOKEN_PREFIX + bearer, basket.getActId());
 				payment.addObject("status", "Payment done, you bought the ticket");
 			}
-			else
-			{
-				// Returning payment is another aspect of fault tolerance
-				paymentClient.returnPayment(Constants.TOKEN_PREFIX + bearer, cardInfo);
-				payment.addObject("status", "Payment error, sorry");
-			}
+		}
+		else
+		{
+			payment.addObject("status", "Payment error, sorry");
 		}
 		return payment;
 	}
